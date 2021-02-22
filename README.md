@@ -1,6 +1,19 @@
 # Unity3D-Simple-Water-Buoyancy-Script
 A simple script that you should attach to a plane with a box trigger collider to have stuff float in the trigger. Simulates water float/ water buoyancy simply - this is not physically accurate.
 
+
+Usage:
+
+1) Create a plane/ Quad
+2) Apply water texture
+3) Add a box collider
+4) Set the box collider to "trigger"
+5) Increase box collider height, adjust collider offset
+6) Add script to GameObject with the trigger
+7) Mess with the values. In my own game I use: `force:5`, `waterDrag: 65`, `max_weight:27`, `mass_force_mult:7`
+
+
+
 Variables explained:
 
 
