@@ -10,7 +10,7 @@ Usage:
 4) Set the box collider to "trigger"
 5) Increase box collider height, adjust collider offset
 6) Add script to GameObject with the trigger
-7) Mess with the values. In my own game I use: `force:5`, `waterDrag: 65`, `max_weight:27`, `mass_force_mult:7`
+7) Mess with the values. In my own game I use: `force:7`, `waterDrag: 65`, `max_weight:17`, `mass_force_mult:9.9`
 
 
 
