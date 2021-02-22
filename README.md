@@ -2,6 +2,9 @@
 A simple script that you should attach to a plane with a box trigger collider to have stuff float in the trigger. Simulates water float/ water buoyancy simply - this is not physically accurate.
 
 
+Demo: https://www.youtube.com/watch?v=5MW4LBHlmeQ
+
+
 Usage:
 
 1) Create a plane/ Quad
