@@ -31,7 +31,7 @@ public class WaterFloat : MonoBehaviour
 
     public float waterDrag = 1;
 
-    private float water_height = 0.00000000000f;
+    private float water_height = 0f;
 
     private HashSet<Transform> transform_set = new HashSet<Transform>();
     private List<WaterFloatHelper> item_list = new List<WaterFloatHelper>();
@@ -75,7 +75,6 @@ public class WaterFloat : MonoBehaviour
     {
         if (transform_set.Contains(other.transform))
         {
-
             int loc = transform_to_int[other.transform];
 
             item_list[loc].rb.useGravity = true;
@@ -141,7 +140,6 @@ public class WaterFloat : MonoBehaviour
 
         item_list[loc].rb.drag = waterDrag * calc * item_list[loc].transition_time;
         item_list[loc].rb.angularDrag = waterDrag * calc * item_list[loc].transition_time;
-
     }
 
 }
