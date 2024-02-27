@@ -31,7 +31,7 @@ public class WaterFloat : MonoBehaviour
 
     public float waterDrag = 1;
 
-    private float water_height = 0.00000000000f;
+    private float water_height = 0f;
 
     private HashSet<Transform> transform_set = new HashSet<Transform>();
     private List<WaterFloatHelper> item_list = new List<WaterFloatHelper>();
