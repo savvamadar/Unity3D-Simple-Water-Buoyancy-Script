@@ -1,145 +1,161 @@
-﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-
-public class WaterFloatHelper
-{
-    public Transform t = null;
-    public Rigidbody rb = null;
-    public bool set_drag = false;
-    public bool add_force = false;
-    public float transition_time = 0f;
-
-    public float original_drag = 0f;
-    public float original_angular_drag = 0f;
-
-    public WaterFloatHelper(Transform _t, Rigidbody _rb, float od, float oad)
-    {
-        rb = _rb;
-        t = _t;
-        set_drag = false;
-        add_force = false;
-        transition_time = 0f;
-        original_drag = od;
-        original_angular_drag = oad;
-    }
-}
+using System.Collections.Generic;
 
 public class WaterFloat : MonoBehaviour
 {
-    public float force = 0.1f;
+    [Header("Water Settings")]
+    [Tooltip("The collider representing the water volume (its top is the water surface).")]
+    public Collider waterCollider;
+    [Tooltip("Density of water in kg/m^3 (typically 1000 for fresh water).")]
+    public float waterDensity = 1000f;
+    [Tooltip("Multiplier for drag applied to submerged objects.")]
+    public float waterDragMultiplier = 1f;
+    [Tooltip("Optional water flow (in world space) that affects drag.")]
+    public Vector3 waterFlow = Vector3.zero;
 
-    public float waterDrag = 1;
+    [Header("Buoyancy Spring Settings")]
+    [Tooltip("Spring constant for the buoyancy force. Lower for a softer vertical response.")]
+    public float springConstant = 20f;
+    [Tooltip("Damping constant to smooth vertical oscillations.")]
+    public float dampingConstant = 0.1f;
 
-    private float water_height = 0f;
+    [Header("Rotational Oscillation Settings (Pitch & Roll Only)")]
+    [Tooltip("Spring constant for aligning pitch and roll to level (preserving yaw).")]
+    public float rotationalSpringConstant = 5f;
+    [Tooltip("Damping coefficient for rotational oscillations (pitch and roll).")]
+    public float rotationalDampingCoefficient = 0.2f;
 
-    private HashSet<Transform> transform_set = new HashSet<Transform>();
-    private List<WaterFloatHelper> item_list = new List<WaterFloatHelper>();
-    private Dictionary<Transform, int> transform_to_int = new Dictionary<Transform, int>();
 
-    public void Start()
+    private readonly Dictionary<Rigidbody, BuoyancyBody> buoyantBodies = new Dictionary<Rigidbody, BuoyancyBody>();
+
+    private float waterSurface;
+
+    void Start()
     {
-        water_height = transform.position.y;
+        if (waterCollider != null)
+            waterSurface = waterCollider.bounds.max.y;
+        else
+            waterSurface = transform.position.y;
     }
 
-    public void OnTriggerEnter(Collider other)
+    void OnTriggerEnter(Collider col)
     {
-        if (!other.attachedRigidbody)
-        {
+        Rigidbody rb = col.attachedRigidbody;
+        if (rb == null)
             return;
-        }
-        if (!transform_set.Contains(other.transform))
-        {
-            transform_set.Add(other.transform);
-            item_list.Add(new WaterFloatHelper(other.transform, other.attachedRigidbody, other.attachedRigidbody.drag, other.attachedRigidbody.angularDrag));
-            transform_to_int[other.transform] = item_list.Count - 1;
-        }
+
+        if (!buoyantBodies.ContainsKey(rb))
+            buoyantBodies.Add(rb, new BuoyancyBody(rb, col));
     }
 
-    public void OnTriggerStay(Collider other)
+    void OnTriggerExit(Collider col)
     {
-        if (transform_set.Contains(other.transform))
+        Rigidbody rb = col.attachedRigidbody;
+        if (rb == null)
+            return;
+
+        if (buoyantBodies.TryGetValue(rb, out BuoyancyBody body))
         {
-            int loc = transform_to_int[other.transform];
-
-            addForce(loc);
-
-            if (item_list[loc].add_force)
-            {
-                item_list[loc].rb.useGravity = true;
-            }
+            body.Reset();
+            buoyantBodies.Remove(rb);
         }
     }
 
-    public void OnTriggerExit(Collider other)
+    void FixedUpdate()
     {
-        if (transform_set.Contains(other.transform))
+        foreach (var kvp in buoyantBodies)
         {
-            int loc = transform_to_int[other.transform];
-
-            item_list[loc].rb.useGravity = true;
-            item_list[loc].rb.drag = item_list[loc].original_drag;
-            item_list[loc].rb.angularDrag = item_list[loc].original_angular_drag;
-
-            item_list.RemoveAt(loc);
-
-            transform_to_int.Remove(other.transform);
-
-            transform_set.Remove(other.transform);
-
-            List<Transform> to_adjust = new List<Transform>();
-
-            foreach (KeyValuePair<Transform, int> entry in transform_to_int)
-            {
-                if(entry.Value > loc)
-                {
-                    to_adjust.Add(entry.Key);
-                }
-            }
-
-            for(int i = 0; i < to_adjust.Count; i++)
-            {
-                transform_to_int[to_adjust[i]] = transform_to_int[to_adjust[i]] - 1;
-            }
+            kvp.Value.ApplyBuoyancy(
+                waterSurface,
+                waterDensity,
+                waterFlow,
+                waterDragMultiplier,
+                springConstant,
+                dampingConstant,
+                rotationalSpringConstant,
+                rotationalDampingCoefficient
+            );
         }
     }
+}
 
-    public float max_weight = 20f;
-    public float mass_force_mult = 2f;
-    public Vector3 down_stream_float_strength;
-    public void addForce(int loc)
+public class BuoyancyBody
+{
+    private readonly Rigidbody rb;
+    private readonly Collider col;
+    private readonly float originalDrag;
+    private readonly float originalAngularDrag;
+
+    public BuoyancyBody(Rigidbody rb, Collider col)
     {
-        Transform obj = item_list[loc].t;
-        var distance2 = Vector3.Distance(transform.position, obj.position);
-
-        item_list[loc].add_force = true;
-
-        if (item_list[loc].t.position.y < water_height)
-        {
-            item_list[loc].rb.useGravity = false;
-            float rough_mass_calc = item_list[loc].rb.mass < 1f ? 1f : 1.0f+(Mathf.InverseLerp(1f, max_weight, item_list[loc].rb.mass)) * mass_force_mult;
-            item_list[loc].rb.AddForce(Vector3.up * (force+Mathf.Abs(Physics.gravity.y)) * rough_mass_calc);
-        }
-        else if (item_list[loc].t.position.y >= water_height)
-        {
-            item_list[loc].rb.useGravity = true;
-        }
-
-        item_list[loc].rb.AddForce(down_stream_float_strength);
-
-        float calc = Mathf.Max(0.33f, (transform.position.y - obj.position.y));
-
-        if (item_list[loc].transition_time < 1.0f)
-        {
-            item_list[loc].transition_time += Time.deltaTime * (calc);
-            if (item_list[loc].transition_time >= 1.0f)
-            {
-                item_list[loc].transition_time = 1.0f;
-            }
-        }
-
-        item_list[loc].rb.drag = waterDrag * calc * item_list[loc].transition_time;
-        item_list[loc].rb.angularDrag = waterDrag * calc * item_list[loc].transition_time;
+        this.rb = rb;
+        this.col = col;
+        originalDrag = rb.drag;
+        originalAngularDrag = rb.angularDrag;
     }
 
+    public void Reset()
+    {
+        rb.drag = originalDrag;
+        rb.angularDrag = originalAngularDrag;
+    }
+
+    public void ApplyBuoyancy(
+        float waterSurface,
+        float waterDensity,
+        Vector3 waterFlow,
+        float waterDragMultiplier,
+        float springConstant,
+        float dampingConstant,
+        float rotationalSpringConstant,
+        float rotationalDampingCoefficient)
+    {
+        Bounds bounds = col.bounds;
+        float objectHeight = bounds.size.y;
+        float effectiveVolume = bounds.size.x * bounds.size.y * bounds.size.z;
+
+        float submersion = Mathf.Clamp01((waterSurface - bounds.min.y) / objectHeight);
+        if (submersion <= 0f)
+            return;
+
+        float equilibriumSubmersion = rb.mass / (waterDensity * effectiveVolume);
+
+        float error = submersion - equilibriumSubmersion;
+        float springForce = springConstant * error;
+        float dampingForce = -dampingConstant * rb.velocity.y;
+        float totalBuoyantForce = springForce + dampingForce;
+
+        rb.AddForce(Vector3.up * totalBuoyantForce, ForceMode.Force);
+
+
+        Vector3 relativeVelocity = rb.velocity - waterFlow;
+        Vector3 dragForce = -relativeVelocity * waterDragMultiplier * submersion;
+        rb.AddForce(dragForce, ForceMode.Force);
+
+
+        Quaternion currentRotation = rb.rotation;
+
+        Vector3 currentForward = rb.transform.forward;
+        Vector3 projectedForward = Vector3.ProjectOnPlane(currentForward, Vector3.up).normalized;
+        if (projectedForward.sqrMagnitude < 0.0001f)
+            projectedForward = rb.transform.forward;
+
+
+        Quaternion targetRotation = Quaternion.LookRotation(projectedForward, Vector3.up);
+
+        Quaternion deltaRotation = targetRotation * Quaternion.Inverse(currentRotation);
+        deltaRotation.ToAngleAxis(out float angleInDegrees, out Vector3 axis);
+        if (angleInDegrees > 180f)
+            angleInDegrees = 360f - angleInDegrees;
+        if (angleInDegrees > 0.01f)
+        {
+            float angleInRadians = angleInDegrees * Mathf.Deg2Rad;
+
+            Vector3 correctiveTorque = axis.normalized * angleInRadians * rotationalSpringConstant;
+
+            Vector3 horizontalAngularVelocity = Vector3.ProjectOnPlane(rb.angularVelocity, Vector3.up);
+            Vector3 dampingTorque = -horizontalAngularVelocity * rotationalDampingCoefficient;
+            rb.AddTorque(correctiveTorque + dampingTorque, ForceMode.Force);
+        }
+    }
 }
